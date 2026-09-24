@@ -1,0 +1,36 @@
+name: Generate Zestly data
+
+on:
+  schedule:
+    - cron: "30 0 */5 * *"   # 6:00 AM IST (00:30 UTC), every 5 days
+  workflow_dispatch:         # lets you run it manually from the Actions tab
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    env:
+      DB_NAME: ${{ secrets.DB_NAME }}
+      DB_USER: ${{ secrets.DB_USER }}
+      DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+      DB_HOST: ${{ secrets.DB_HOST }}
+      DB_PORT: ${{ secrets.DB_PORT }}
+      DB_SSLMODE: ${{ secrets.DB_SSLMODE }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Generate new orders
+        run: python generate_data.py
+
+      - name: Clean data
+        run: python data_cleaning.py
+
+      - name: Rebuild analytics and KPIs
+        run: python sales_data.py
