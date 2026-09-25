@@ -33,6 +33,7 @@ header[data-testid="stHeader"] {{ display: none; }}
 .block-container {{ padding: 1rem 1.6rem 2rem; max-width: 1500px; }}
 section[data-testid="stSidebar"] {{ background: {CARD}; border-right: 1px solid {BORDER}; width: 250px !important; }}
 section[data-testid="stSidebar"] .block-container {{ padding: 1.2rem 1rem; }}
+section[data-testid="stSidebar"] [data-testid="stImage"] {{ margin-top: -14px; }}
 .brand {{ font-weight: 800; font-size: 1.15rem; display:flex; align-items:center; gap:8px; margin-bottom: 22px; }}
 .brand .logo {{ width:26px; height:26px; border-radius:8px; background:{BLUE}; display:inline-block; }}
 section[data-testid="stSidebar"] a[data-testid="stPageLink-NavLink"] {{ border-radius:10px; padding:9px 12px; margin-bottom:3px; }}
