@@ -1,4 +1,5 @@
 # Zestly — Automated E-Commerce Data Pipeline
+( https://automated-zestly-data-pipeline-yvhmeweq73qp9n4ufbqerg.streamlit.app/ )---> link to live dashboard 
 
 A self-running data pipeline that generates messy, realistic e-commerce orders, cleans them on a schedule, rebuilds an analytics layer, and serves the results through a live Streamlit dashboard — with zero manual intervention after setup.
 
