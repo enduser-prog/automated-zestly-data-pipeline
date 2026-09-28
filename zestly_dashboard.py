@@ -562,9 +562,7 @@ with st.sidebar:
     st.write("")
     for p in pages:
         st.page_link(p)
-    html("""<div class="premium"><b>Upgrade to Premium!</b><p>Upgrade your account and unlock all of the benefits.</p>
-        <div class="btn">Upgrade premium</div></div>""")
-
+   
 q = st.session_state.get("q", "").strip()
 
 h1, h2, h3 = st.columns([3, 2.2, 1], vertical_alignment="center")
