@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
+import streamlit.components.v1 as components
 from sqlalchemy import create_engine
 
 from config import DATABASE_URL
@@ -137,6 +138,7 @@ div[data-testid="stSelectboxVirtualDropdown"],
 ul[role="listbox"] {{ background:{CARD} !important; background-color:{CARD} !important; color-scheme:light; }}
 ul[role="listbox"] li, ul[role="listbox"] li * {{ background-color:transparent !important; color:{TEXT} !important; -webkit-text-fill-color:{TEXT} !important; font-size:.82rem; }}
 ul[role="listbox"] li:hover, ul[role="listbox"] li[aria-selected="true"] {{ background-color:#EAF1FF !important; }}
+div[data-testid="stElementContainer"]:has(iframe[height="0"]) {{ display:none; }}
 table.bs.good th {{ color:#15803D; border-bottom:2px solid {GREEN}; }}
 table.bs.slow th {{ color:#B45309; border-bottom:2px solid {AMBER}; }}
 .rk {{ display:inline-flex; width:24px; height:24px; border-radius:50%; background:#DCFCE7; color:#15803D; font-weight:800; font-size:.72rem;
@@ -235,6 +237,41 @@ def margin_tl(v, sp):
 
 def prod(v):
     return v.groupby("product_name").agg(sold=("quantity", "sum"), rev=("revenue", "sum"), gp=("gross_profit", "sum"))
+
+
+def paint_selects():
+    """Force the View / 'Selected dates' dropdown colour with inline styles (beats any theme CSS).
+    Runs in a zero-height component that reaches into the page and re-paints whenever Streamlit re-renders."""
+    components.html(f"""<script>
+const BG = "{SELECT_BG}", TXT = "{SELECT_TXT}", BORDER = "{SELECT_BORDER}";
+const P = window.parent, doc = P.document;
+function paint() {{
+  doc.querySelectorAll('[data-testid="stSelectbox"] [data-baseweb="select"]').forEach(function (sel) {{
+    const all = [sel].concat(Array.from(sel.querySelectorAll('*')));
+    all.forEach(function (el) {{
+      const tag = el.tagName.toLowerCase();
+      if (tag === 'svg' || tag === 'path') {{ el.style.setProperty('fill', TXT, 'important'); return; }}
+      if (tag === 'input') {{ el.style.setProperty('background', 'transparent', 'important'); }}
+      else {{ el.style.setProperty('background-color', BG, 'important'); el.style.setProperty('background-image', 'none', 'important'); }}
+      el.style.setProperty('color', TXT, 'important');
+      el.style.setProperty('-webkit-text-fill-color', TXT, 'important');
+      el.style.setProperty('box-shadow', 'none', 'important');
+      if (el !== sel) el.style.setProperty('border-color', 'transparent', 'important');
+    }});
+    sel.style.setProperty('border', '1px solid ' + BORDER, 'important');
+    sel.style.setProperty('border-radius', '12px', 'important');
+    sel.style.setProperty('overflow', 'hidden', 'important');
+  }});
+}}
+paint();
+if (P.__zSelObs) P.__zSelObs.disconnect();
+let busy = false;
+P.__zSelObs = new P.MutationObserver(function () {{
+  if (busy) return; busy = true;
+  P.requestAnimationFrame(function () {{ paint(); busy = false; }});
+}});
+P.__zSelObs.observe(doc.body, {{ childList: true, subtree: true }});
+</script>""", height=0)
 
 
 # ---------- UI pieces ----------
@@ -707,6 +744,7 @@ def search_results(q, c):
 
 # ------------------------------------------------------------------ App shell
 style()
+paint_selects()
 
 pages = [
     st.Page(overview, title="Overview", icon=":material/dashboard:", url_path="overview", default=True),
