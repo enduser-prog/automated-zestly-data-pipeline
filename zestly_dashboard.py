@@ -95,7 +95,7 @@ div[data-testid="stDownloadButton"] button {{ background:{BLUE}; color:#fff; bor
 </style>""", unsafe_allow_html=True)
 
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=10)
 def load():
     d = pd.read_sql("SELECT * FROM analytics_sales;", engine)
     d["order_date"] = pd.to_datetime(d["order_date"])
