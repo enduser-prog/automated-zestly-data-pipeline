@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
+from plotly.subplots import make_subplots
 from sqlalchemy import create_engine
 
 from config import DATABASE_URL
@@ -22,6 +23,11 @@ PALETTE = [BLUE, GREEN, AMBER, "#8B5CF6", "#EC4899", "#14B8A6", "#94A3B8"]
 DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
 inr = lambda v: f"₹{v:,.0f}"
 z = lambda n, d: n / d if d else 0
+
+# Simple line-style magnifier (stroke only, no fill, no colour) used inside the search box
+SEARCH_ICON = ("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' "
+               "fill='none' stroke='%236B7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'>"
+               "<circle cx='11' cy='11' r='7'/><line x1='21' y1='21' x2='16.65' y2='16.65'/></svg>")
 
 
 def style():
@@ -49,8 +55,10 @@ section[data-testid="stSidebar"] div[data-testid="stTextInput"] div[data-baseweb
     border:1px solid {SEARCH_BORDER} !important; border-radius:12px !important; box-shadow:none !important; color-scheme:light; }}
 section[data-testid="stSidebar"] div[data-testid="stTextInput"] div[data-baseweb="base-input"] {{ background:transparent !important; }}
 section[data-testid="stSidebar"] [data-testid="stTextInputField"],
-section[data-testid="stSidebar"] div[data-testid="stTextInput"] input {{ background:transparent !important; background-color:transparent !important; font-size:.84rem;
-    color:{SEARCH_TXT} !important; -webkit-text-fill-color:{SEARCH_TXT} !important; caret-color:{SEARCH_TXT}; }}
+section[data-testid="stSidebar"] div[data-testid="stTextInput"] input {{ background-color:transparent !important; font-size:.84rem;
+    color:{SEARCH_TXT} !important; -webkit-text-fill-color:{SEARCH_TXT} !important; caret-color:{SEARCH_TXT};
+    background-image:url("{SEARCH_ICON}") !important; background-repeat:no-repeat !important; background-position:10px center !important;
+    background-size:16px 16px !important; padding-left:34px !important; }}
 section[data-testid="stSidebar"] [data-testid="stTextInputField"]::placeholder,
 section[data-testid="stSidebar"] div[data-testid="stTextInput"] input::placeholder {{ color:{SEARCH_HINT} !important; -webkit-text-fill-color:{SEARCH_HINT} !important; opacity:1 !important; }}
 section[data-testid="stSidebar"] [data-testid="stTextInputRootElement"]:focus-within,
@@ -99,12 +107,19 @@ details.inf > summary::-webkit-details-marker {{ display:none; }}
 details.inf > summary:hover, details.inf[open] > summary {{ border-color:{BLUE}; color:{BLUE}; }}
 details.inf > .tip {{ position:absolute; z-index:999; top:26px; left:-8px; width:250px; background:#fff; border:1px solid {BORDER}; border-radius:10px;
     box-shadow:0 8px 24px rgba(17,24,39,.14); padding:9px 11px; font-size:.76rem; font-weight:400; line-height:1.4; color:#374151; }}
-div[data-testid="stSelectbox"] div[data-baseweb="select"] > div {{ background:{SEARCH_BG} !important; border:1px solid {SEARCH_BORDER} !important;
-    border-radius:10px !important; min-height:34px; box-shadow:none !important; }}
+div[data-testid="stSelectbox"] {{ color-scheme:light; }}
+div[data-testid="stSelectbox"] div[data-baseweb="select"],
+div[data-testid="stSelectbox"] div[data-baseweb="select"] > div,
+div[data-testid="stSelectbox"] div[data-baseweb="select"] > div > div,
+div[data-testid="stSelectbox"] div[data-baseweb="select"] input {{ background:{SEARCH_BG} !important; background-color:{SEARCH_BG} !important; }}
+div[data-testid="stSelectbox"] div[data-baseweb="select"] > div {{ border:1px solid {SEARCH_BORDER} !important;
+    border-radius:12px !important; min-height:34px; box-shadow:none !important; }}
+div[data-testid="stSelectbox"] div[data-baseweb="select"] > div:focus-within {{ border-color:{BLUE} !important; }}
 div[data-testid="stSelectbox"] div[data-baseweb="select"] * {{ color:{SEARCH_TXT} !important; -webkit-text-fill-color:{SEARCH_TXT} !important; font-size:.8rem; font-weight:600; }}
 div[data-testid="stSelectbox"] div[data-baseweb="select"] svg {{ fill:{SEARCH_TXT} !important; }}
-ul[role="listbox"] {{ background:{CARD} !important; }}
+div[data-baseweb="popover"] ul, ul[role="listbox"] {{ background:{CARD} !important; }}
 ul[role="listbox"] li, ul[role="listbox"] li * {{ color:{TEXT} !important; -webkit-text-fill-color:{TEXT} !important; font-size:.82rem; }}
+ul[role="listbox"] li:hover, ul[role="listbox"] li[aria-selected="true"] {{ background:#EAF1FF !important; }}
 table.bs.good th {{ color:#15803D; border-bottom:2px solid {GREEN}; }}
 table.bs.slow th {{ color:#B45309; border-bottom:2px solid {AMBER}; }}
 .rk {{ display:inline-flex; width:24px; height:24px; border-radius:50%; background:#DCFCE7; color:#15803D; font-weight:800; font-size:.72rem;
@@ -335,11 +350,42 @@ def donut(labels, values, h=230):
     show(base(f, h).update_layout(showlegend=True, legend=dict(font=dict(size=11, color=CHARTTXT))))
 
 
-def hist(values, h=230):
-    f = go.Figure(go.Histogram(x=list(values), nbinsx=20, marker_color=BLUE))
-    f.update_xaxes(tickprefix="₹")
+def hist(values, h=260):
+    """Order value distribution: box plot strip (spread + outliers) above a histogram, with median and average lines."""
+    v = pd.Series(list(values), dtype="float").dropna()
+    if v.empty:
+        html('<div class="vs">No data in this period</div>')
+        return
+
+    med, avg = v.median(), v.mean()
+    f = make_subplots(rows=2, cols=1, shared_xaxes=True, row_heights=[0.2, 0.8], vertical_spacing=0.03)
+
+    # Top strip: box plot (middle 50% of orders + outliers)
+    f.add_trace(go.Box(x=v, orientation="h", line=dict(color=BLUE), fillcolor="rgba(47,107,255,.15)",
+                       boxpoints="outliers", marker=dict(color=BLUE, size=4, opacity=.5),
+                       hoverinfo="x", name=""), row=1, col=1)
+
+    # Main: histogram
+    f.add_trace(go.Histogram(x=v, nbinsx=20, marker=dict(color=BLUE, line=dict(color=CARD, width=1.5)),
+                             opacity=.9, name="",
+                             hovertemplate="Order value: ₹%{x}<br>Orders: %{y}<extra></extra>"), row=2, col=1)
+
+    # Median and average reference lines (labels placed on opposite sides so they never overlap)
+    med_pos, avg_pos = ("top left", "top right") if med <= avg else ("top right", "top left")
+    f.add_vline(x=med, line=dict(color=GREEN, width=2, dash="dash"), row=2, col=1,
+                annotation_text=f"Median {inr(med)}", annotation_position=med_pos,
+                annotation_font=dict(size=11, color="#15803D"))
+    f.add_vline(x=avg, line=dict(color=AMBER, width=2, dash="dot"), row=2, col=1,
+                annotation_text=f"Average {inr(avg)}", annotation_position=avg_pos,
+                annotation_font=dict(size=11, color="#B45309"))
+
     base(f, h)
-    axis_style(f, xt="Order value (₹)", yt="Orders")
+    axis_style(f)
+    f.update_layout(bargap=0.04)
+    f.update_xaxes(showticklabels=False, title=None, row=1, col=1)
+    f.update_yaxes(showticklabels=False, showline=False, ticks="", showgrid=False, row=1, col=1)
+    f.update_xaxes(tickprefix="₹", title=dict(text="Order value (₹)", font=dict(size=11, color=CHARTTXT), standoff=8), row=2, col=1)
+    f.update_yaxes(title=dict(text="Orders", font=dict(size=11, color=CHARTTXT), standoff=8), row=2, col=1)
     show(f)
 
 
@@ -404,9 +450,10 @@ def overview():
         st.write("")
         with card("Best Selling Products", "The five products that sold the most units in this period."):
             bs = prod(c.cv).sort_values("sold", ascending=False).head(5)
+            # Revenue is plain; Profit is green (or red if it ever were a loss)
             tbl(["ID", "NAME", "SOLD", "REVENUE", "PROFIT"],
                 [[f'<span style="color:{MUTED}">#{83000 + i}</span>', nm(n), f"{int(r.sold):,} sold",
-                  sgn(r.rev) if r.gp >= 0 else f'<span style="color:{RED};font-weight:600">{inr(r.rev)}</span>', inr(r.gp)]
+                  inr(r.rev), sgn(r.gp)]
                  for i, (n, r) in enumerate(bs.iterrows(), 1)], left=2)
     with right:
         with card("Orders by Weekday", "How many orders came in on each day of the week. Darker bars are busier days."):
@@ -548,7 +595,10 @@ def orders():
         donut(s.index, s.values)
     st.write("")
     l, r = st.columns(2)
-    with l, card("Order Value Distribution"):
+    with l, card("Order Value Distribution",
+                 "How big your orders are. Each bar counts orders in a value range. The box on top shows where the middle 50% "
+                 "of orders fall, the green line is the median (typical order) and the amber line is the average. "
+                 "If the average is well above the median, a few very large orders are pulling it up."):
         hist(c.cv.groupby("order_id").revenue.sum().values)
     with r, card("Orders by Category", "How many orders include products from each category."):
         oc = c.cur.groupby("category").order_id.nunique().sort_values(ascending=False).head(6)
@@ -652,11 +702,11 @@ with st.sidebar:
         st.image(str(LOGO), width=185)
     else:
         html('<div class="brand"><span class="logo"></span>Zestly</div>')
-    st.text_input("search", placeholder="🔍  Search products, orders...", label_visibility="collapsed", key="q")
+    st.text_input("search", placeholder="Search products, orders...", label_visibility="collapsed", key="q")
     st.write("")
     for p in pages:
         st.page_link(p)
-   
+
 q = st.session_state.get("q", "").strip()
 
 h1, h2, h3 = st.columns([3, 2.2, 1], vertical_alignment="center")
