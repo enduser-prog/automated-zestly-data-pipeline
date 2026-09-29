@@ -110,27 +110,19 @@ details.inf > summary:hover, details.inf[open] > summary {{ border-color:{BLUE};
 details.inf > .tip {{ position:absolute; z-index:999; top:26px; left:-8px; width:250px; background:#fff; border:1px solid {BORDER}; border-radius:10px;
     box-shadow:0 8px 24px rgba(17,24,39,.14); padding:9px 11px; font-size:.76rem; font-weight:400; line-height:1.4; color:#374151; }}
 
-/* ---- "Selected dates" / View dropdown: #909090 on every page ---- */
-.stApp div[data-testid="stSelectbox"] {{ color-scheme:light; }}
-/* paint EVERY layer of the widget the same grey so no dark layer can show through */
-.stApp div[data-testid="stSelectbox"] div[data-baseweb="select"],
-.stApp div[data-testid="stSelectbox"] div[data-baseweb="select"] > div,
-.stApp div[data-testid="stSelectbox"] div[data-baseweb="select"] div,
-.stApp div[data-baseweb="select"],
-.stApp div[data-baseweb="select"] > div,
-.stApp div[data-baseweb="select"] div {{ background:{SELECT_BG} !important; background-color:{SELECT_BG} !important;
-    background-image:none !important; box-shadow:none !important; border-color:transparent !important; }}
-.stApp div[data-testid="stSelectbox"] div[data-baseweb="select"],
-.stApp div[data-baseweb="select"] {{ border:1px solid {SELECT_BORDER} !important; border-radius:12px !important; min-height:34px; overflow:hidden; color-scheme:light; }}
-.stApp div[data-testid="stSelectbox"] div[data-baseweb="select"]:hover,
-.stApp div[data-testid="stSelectbox"] div[data-baseweb="select"]:hover div {{ background:{SELECT_BG_HOVER} !important; background-color:{SELECT_BG_HOVER} !important; }}
-.stApp div[data-testid="stSelectbox"] div[data-baseweb="select"]:focus-within {{ border-color:{BLUE} !important; }}
-.stApp div[data-baseweb="select"] input {{ background:transparent !important; background-color:transparent !important; border:none !important; box-shadow:none !important; }}
-/* text + arrow */
-.stApp div[data-baseweb="select"] *,
-.stApp div[data-testid="stSelectbox"] div[data-baseweb="select"] * {{ color:{SELECT_TXT} !important; -webkit-text-fill-color:{SELECT_TXT} !important;
-    font-size:.8rem; font-weight:600; }}
-.stApp div[data-baseweb="select"] svg {{ fill:{SELECT_TXT} !important; color:{SELECT_TXT} !important; }}
+/* ---- "Selected dates" / View dropdown: #909090, built on data-testid like the search bar ---- */
+.stApp div[data-testid="stSelectbox"] {{ background:{SELECT_BG} !important; background-color:{SELECT_BG} !important;
+    border:1px solid {SELECT_BORDER} !important; border-radius:12px !important; overflow:hidden; box-shadow:none !important; color-scheme:light; }}
+.stApp div[data-testid="stSelectbox"]:hover {{ background:{SELECT_BG_HOVER} !important; background-color:{SELECT_BG_HOVER} !important; }}
+.stApp div[data-testid="stSelectbox"]:focus-within {{ border-color:{BLUE} !important; }}
+/* everything inside gets the same grey, so no dark layer can show */
+.stApp div[data-testid="stSelectbox"] * {{ background-color:transparent !important; background-image:none !important; border-color:transparent !important;
+    box-shadow:none !important; color:{SELECT_TXT} !important; -webkit-text-fill-color:{SELECT_TXT} !important; font-size:.8rem; font-weight:600; }}
+.stApp div[data-testid="stSelectbox"] svg,
+.stApp div[data-testid="stSelectbox"] svg * {{ fill:{SELECT_TXT} !important; color:{SELECT_TXT} !important; }}
+.stApp div[data-testid="stSelectbox"] input {{ caret-color:{SELECT_TXT}; }}
+/* same thing for the older baseweb structure, in case your version still uses it */
+.stApp div[data-baseweb="select"], .stApp div[data-baseweb="select"] > div {{ background:transparent !important; background-color:transparent !important; box-shadow:none !important; }}
 /* the list that opens under it */
 div[data-baseweb="popover"] div[data-baseweb="menu"],
 div[data-baseweb="popover"] ul,
@@ -246,21 +238,22 @@ def paint_selects():
 const BG = "{SELECT_BG}", TXT = "{SELECT_TXT}", BORDER = "{SELECT_BORDER}";
 const P = window.parent, doc = P.document;
 function paint() {{
-  doc.querySelectorAll('[data-testid="stSelectbox"] [data-baseweb="select"]').forEach(function (sel) {{
-    const all = [sel].concat(Array.from(sel.querySelectorAll('*')));
-    all.forEach(function (el) {{
-      const tag = el.tagName.toLowerCase();
-      if (tag === 'svg' || tag === 'path') {{ el.style.setProperty('fill', TXT, 'important'); return; }}
-      if (tag === 'input') {{ el.style.setProperty('background', 'transparent', 'important'); }}
-      else {{ el.style.setProperty('background-color', BG, 'important'); el.style.setProperty('background-image', 'none', 'important'); }}
-      el.style.setProperty('color', TXT, 'important');
-      el.style.setProperty('-webkit-text-fill-color', TXT, 'important');
-      el.style.setProperty('box-shadow', 'none', 'important');
-      if (el !== sel) el.style.setProperty('border-color', 'transparent', 'important');
-    }});
+  doc.querySelectorAll('[data-testid="stSelectbox"]').forEach(function (sel) {{
+    sel.style.setProperty('background-color', BG, 'important');
     sel.style.setProperty('border', '1px solid ' + BORDER, 'important');
     sel.style.setProperty('border-radius', '12px', 'important');
     sel.style.setProperty('overflow', 'hidden', 'important');
+    sel.style.setProperty('box-shadow', 'none', 'important');
+    sel.querySelectorAll('*').forEach(function (el) {{
+      const tag = el.tagName.toLowerCase();
+      if (tag === 'svg' || tag === 'path') {{ el.style.setProperty('fill', TXT, 'important'); return; }}
+      el.style.setProperty('background-color', 'transparent', 'important');
+      el.style.setProperty('background-image', 'none', 'important');
+      el.style.setProperty('border-color', 'transparent', 'important');
+      el.style.setProperty('box-shadow', 'none', 'important');
+      el.style.setProperty('color', TXT, 'important');
+      el.style.setProperty('-webkit-text-fill-color', TXT, 'important');
+    }});
   }});
 }}
 paint();
