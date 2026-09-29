@@ -4,7 +4,6 @@ from types import SimpleNamespace
 
 import pandas as pd
 import plotly.graph_objects as go
-import plotly.colors as pc
 import streamlit as st
 from sqlalchemy import create_engine
 
@@ -13,7 +12,6 @@ from config import DATABASE_URL
 st.set_page_config(page_title="Zestly", page_icon="⚡", layout="wide")
 engine = create_engine(DATABASE_URL)
 LOGO = Path(__file__).parent / "zestly_logo.png"
-
 BG, CARD, BORDER, TEXT, MUTED = "#F3F4F8", "#FFFFFF", "#ECEDF3", "#111827", "#6B7280"
 BLUE, GREEN, RED, AMBER = "#2F6BFF", "#22C55E", "#EF4444", "#F59E0B"
 OFFWHITE, GREYTXT, GREYLINE = "#F7F7F4", "#6B7280", "#E2E3E8"
@@ -22,24 +20,8 @@ SEARCH_BG, SEARCH_BORDER, SEARCH_TXT, SEARCH_HINT = "#E5E7EB", "#D1D5DB", "#1F29
 NAV_ICON, NAV_ICON_ACTIVE = "#4B5563", "#4C8DFF"
 PALETTE = [BLUE, GREEN, AMBER, "#8B5CF6", "#EC4899", "#14B8A6", "#94A3B8"]
 DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
-
 inr = lambda v: f"₹{v:,.0f}"
 z = lambda n, d: n / d if d else 0
-
-# ---------- Date granularity (scales as more days of data pile up) ----------
-GRAN_FREQ = {"Daily": "D", "Weekly": "W-MON", "Monthly": "MS", "Quarterly": "QS"}
-GRAN_FMT = {"Daily": "%d %b", "Weekly": "%d %b", "Monthly": "%b %Y", "Quarterly": "%b %Y"}
-
-
-def auto_granularity(n_days):
-    """Pick a sensible bucket size automatically based on how wide the selected range is."""
-    if n_days <= 31:
-        return "Daily"
-    if n_days <= 180:
-        return "Weekly"
-    if n_days <= 730:
-        return "Monthly"
-    return "Quarterly"
 
 
 def style():
@@ -121,22 +103,17 @@ def load():
 
 
 def ctx():
-    """Current and previous period frames, driven by the date range + granularity in the header."""
+    """Current and previous period frames, driven by the date range in the header."""
     df = load()
     s, e = (pd.to_datetime(x) for x in st.session_state["rng"])
     n = (e - s).days + 1
     ps, pe = s - pd.Timedelta(days=n), s - pd.Timedelta(days=1)
-
-    gran = st.session_state.get("gran_choice", "Auto")
-    gran = auto_granularity(n) if gran == "Auto" else gran
-    freq = GRAN_FREQ[gran]
-
     win = lambda d, a, b: d[(d.order_date >= a) & (d.order_date <= b)]
     base_ = df[df["data_quality_flag"] != "Deduplicated"]
     cur, prv = win(base_, s, e), win(base_, ps, pe)
     return SimpleNamespace(df=df, raw=win(df, s, e), raw_p=win(df, ps, pe), cur=cur, prv=prv,
-                            cv=cur[cur.order_status == "Delivered"], pv=prv[prv.order_status == "Delivered"],
-                            s=s, e=e, ps=ps, pe=pe, n=n, gran=gran, freq=freq, xfmt=GRAN_FMT[gran])
+                           cv=cur[cur.order_status == "Delivered"], pv=prv[prv.order_status == "Delivered"],
+                           s=s, e=e, ps=ps, pe=pe, n=n)
 
 
 def mt(v):
@@ -150,21 +127,12 @@ def mt(v):
                 lossv=-v.gross_profit.clip(upper=0).sum())
 
 
-def daily(v, col, s, e, fn="sum", freq="D"):
-    """Bucket a value by date at the given granularity (D/W-MON/MS/QS) instead of always by single day."""
-    idx = pd.date_range(s, e, freq=freq)
-    if len(v):
-        g = v.set_index("order_date")[col].resample(freq)
-        out = getattr(g, fn)()
-    else:
-        out = pd.Series(dtype="float64")
-    return out.reindex(idx, fill_value=0)
+def daily(v, col, s, e, fn="sum"):
+    return getattr(v.groupby(v.order_date.dt.normalize())[col], fn)().reindex(pd.date_range(s, e), fill_value=0)
 
 
-def margin_daily(v, s, e, freq="D"):
-    g = daily(v, "gross_profit", s, e, freq=freq)
-    r = daily(v, "revenue", s, e, freq=freq).replace(0, float("nan"))
-    return (g / r * 100).fillna(0)
+def margin_daily(v, s, e):
+    return (daily(v, "gross_profit", s, e) / daily(v, "revenue", s, e).replace(0, float("nan")) * 100).fillna(0)
 
 
 def prod(v):
@@ -199,17 +167,10 @@ def row(specs):
         kpi(col, *s)
 
 
-def card(title, help=None):
-    """A bordered card with a title, and an optional ⓘ button explaining the chart in plain language."""
+def card(title):
     c = st.container(border=True)
     with c:
-        if help:
-            t, i = st.columns([9, 1], vertical_alignment="center")
-            t.markdown(f'<div class="ttl" style="margin:6px 0">{title}</div>', unsafe_allow_html=True)
-            with i.popover("ⓘ", use_container_width=True):
-                st.markdown(f'<div style="font-size:.82rem;color:{MUTED};line-height:1.5">{help}</div>', unsafe_allow_html=True)
-        else:
-            html(f'<div class="ttl" style="margin:6px 0">{title}</div>')
+        html(f'<div class="ttl" style="margin:6px 0">{title}</div>')
     return c
 
 
@@ -218,7 +179,7 @@ CHARTTXT = "#4B5563"
 
 def base(fig, h):
     fig.update_layout(height=h, margin=dict(t=5, l=5, r=5, b=5), paper_bgcolor=CARD, plot_bgcolor=CARD,
-                       font=dict(family="Inter", color=CHARTTXT, size=11), showlegend=False)
+                      font=dict(family="Inter", color=CHARTTXT, size=11), showlegend=False)
     return fig
 
 
@@ -231,7 +192,7 @@ def axis_style(f, xt=None, yt=None, xgrid=False, ygrid=True):
     """Make both axes visible: dark tick labels, a light axis line, optional axis titles."""
     def kw(title, grid):
         d = dict(tickfont=dict(size=11, color=CHARTTXT), automargin=True, showline=True, linecolor="#D1D5DB",
-                  zeroline=False, showgrid=grid, gridcolor=BORDER, showticklabels=True, ticks="outside", tickcolor="#D1D5DB")
+                 zeroline=False, showgrid=grid, gridcolor=BORDER, showticklabels=True, ticks="outside", tickcolor="#D1D5DB")
         if title:
             d["title"] = dict(text=title, font=dict(size=11, color=CHARTTXT), standoff=8)
         return d
@@ -240,38 +201,31 @@ def axis_style(f, xt=None, yt=None, xgrid=False, ygrid=True):
     return f
 
 
-def trend(cs, ps, h=220, pre="₹", suf="", yt=None, xfmt="%d %b"):
+def trend(cs, ps, h=220, pre="₹", suf="", yt=None):
     f = go.Figure()
     f.add_scatter(x=cs.index, y=cs.values, name="This period", mode="lines",
                   line=dict(color=BLUE, width=2.5, shape="spline"), fill="tozeroy", fillcolor="rgba(47,107,255,.08)")
     f.add_scatter(x=cs.index, y=ps.values[:len(cs)], name="Last period", mode="lines",
                   line=dict(color="#B8BCCB", width=1.5, dash="dot", shape="spline"))
     f.update_layout(hovermode="x unified", showlegend=True,
-                     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1,
-                                 font=dict(size=11, color=CHARTTXT)))
-    f.update_xaxes(tickformat=xfmt)
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1,
+                                font=dict(size=11, color=CHARTTXT)))
+    f.update_xaxes(tickformat="%d %b")
     f.update_yaxes(tickprefix=pre, ticksuffix=suf)
     base(f, h)
     axis_style(f, xt="Date", yt=yt)
     show(f)
 
 
-def bars(x, y, h=230, peak=False, horiz=False, pre="", suf="", cat=None, val=None, caption=None):
-    """Bars shaded on a gradient (palest = lowest, darkest = highest). The best bar gets an amber highlight when peak=True."""
+def bars(x, y, h=230, peak=False, horiz=False, pre="", suf="", cat=None, val=None):
     x, y = list(x), list(y)
-    if y:
-        lo, hi = min(y), max(y)
-        span = (hi - lo) or 1
-        colors = [pc.find_intermediate_color("#C7D3F5", BLUE, (v - lo) / span, colortype="rgb") for v in y]
-        if peak:
-            colors[y.index(hi)] = AMBER
-    else:
-        colors = []
+    top = y.index(max(y)) if y else -1
+    on = lambda i: not peak or i == top
     f = go.Figure(go.Bar(x=y if horiz else x, y=x if horiz else y, orientation="h" if horiz else "v",
-                          marker_color=colors,
-                          text=[f"{pre}{v:,.0f}{suf}" for v in y],
-                          textfont=dict(color=CHARTTXT, size=11),
-                          textposition="outside", cliponaxis=False))
+                         marker_color=[BLUE if on(i) else "#C7D3F5" for i in range(len(y))],
+                         text=[f"{pre}{v:,.0f}{suf}" for v in y],
+                         textfont=dict(color=CHARTTXT, size=11),
+                         textposition="outside", cliponaxis=False))
     try:
         f.update_layout(barcornerradius=8)
     except Exception:
@@ -287,15 +241,14 @@ def bars(x, y, h=230, peak=False, horiz=False, pre="", suf="", cat=None, val=Non
         axis_style(f, xt=cat, yt=val, xgrid=False, ygrid=True)
         f.update_layout(margin=dict(t=22, l=5, r=5, b=5))
     show(f)
-    st.caption(caption or ("Darker bar = higher value" + (" · gold bar = the best one" if peak else "")))
 
 
 def donut(labels, values, h=230):
     f = go.Figure(go.Pie(labels=list(labels), values=list(values), hole=.7, sort=False,
-                          textinfo="percent", textposition="inside",
-                          insidetextfont=dict(color="#FFFFFF", size=11, family="Inter"),
-                          texttemplate="%{percent:.1%}",
-                          marker=dict(colors=PALETTE, line=dict(color=CARD, width=2))))
+                         textinfo="percent", textposition="inside",
+                         insidetextfont=dict(color="#FFFFFF", size=11, family="Inter"),
+                         texttemplate="%{percent:.1%}",
+                         marker=dict(colors=PALETTE, line=dict(color=CARD, width=2))))
     show(base(f, h).update_layout(showlegend=True, legend=dict(font=dict(size=11, color=CHARTTXT))))
 
 
@@ -309,8 +262,8 @@ def hist(values, h=230):
 
 def gauge(rate, h=190):
     g = go.Figure(go.Indicator(mode="gauge+number", value=rate, number=dict(suffix="%", font=dict(size=34, color=TEXT)),
-                                gauge=dict(axis=dict(range=[0, 100], visible=False), bar=dict(color=GREEN, thickness=0.28),
-                                           bgcolor="#EEF0F6", borderwidth=0)))
+                               gauge=dict(axis=dict(range=[0, 100], visible=False), bar=dict(color=GREEN, thickness=0.28),
+                                          bgcolor="#EEF0F6", borderwidth=0)))
     show(base(g, h))
 
 
@@ -321,8 +274,8 @@ def tbl(head, rows, left=1):
     html(f'<table class="bs"><tr>{th}</tr>{tr}</table>' if rows else f'<div class="vs">No data in this period</div>')
 
 
-def nm(name, icon="📦"):
-    return f'<span class="ico">{icon}</span>{escape(str(name))[:32]}'
+def nm(name):
+    return f'<span class="ico">📦</span>{escape(str(name))[:32]}'
 
 
 def sgn(v):
@@ -332,8 +285,8 @@ def sgn(v):
 PROD_HEAD = ["NAME", "SOLD", "REVENUE", "PROFIT", "MARGIN"]
 
 
-def prow(name, r, icon="📦"):
-    return [nm(name, icon), f"{int(r.sold):,} sold", inr(r.rev), sgn(r.gp), f"{z(r.gp, r.rev) * 100:.1f}%" if r.rev else "—"]
+def prow(name, r):
+    return [nm(name), f"{int(r.sold):,} sold", inr(r.rev), sgn(r.gp), f"{z(r.gp, r.rev) * 100:.1f}%" if r.rev else "—"]
 
 
 # ------------------------------------------------------------------ Overview
@@ -353,25 +306,24 @@ def overview():
                 html(f'<div class="ttl">Total Profit</div><div style="height:38px"></div>'
                      f'<div class="kv" style="font-size:2rem">{inr(a["gp"])}</div>{pill(a["gp"], b["gp"])}')
             with y:
-                trend(daily(c.cv, "gross_profit", c.s, c.e, freq=c.freq), daily(c.pv, "gross_profit", c.ps, c.pe, freq=c.freq),
-                      200, yt="Profit (₹)", xfmt=c.xfmt)
+                trend(daily(c.cv, "gross_profit", c.s, c.e), daily(c.pv, "gross_profit", c.ps, c.pe), 200, yt="Profit (₹)")
             segs = c.cv.groupby("category").customer_id.nunique().sort_values(ascending=False).head(3)
             for col, (n, v), clr in zip(st.columns(3), segs.items(), [BLUE, GREEN, AMBER]):
                 col.markdown(f'<div class="seg" style="--c:{clr}"><div class="n">{v:,}</div><div class="t">{escape(str(n))}</div></div>',
                              unsafe_allow_html=True)
         st.write("")
-        with card("Best Selling Products", "The 5 products with the most units sold in this period, ranked highest first."):
+        with card("Best Selling Products"):
             bs = prod(c.cv).sort_values("sold", ascending=False).head(5)
             tbl(["ID", "NAME", "SOLD", "REVENUE", "PROFIT"],
                 [[f'<span style="color:{MUTED}">#{83000 + i}</span>', nm(n), f"{int(r.sold):,} sold",
                   sgn(r.rev) if r.gp >= 0 else f'<span style="color:{RED};font-weight:600">{inr(r.rev)}</span>', inr(r.gp)]
                  for i, (n, r) in enumerate(bs.iterrows(), 1)], left=2)
     with right:
-        with card("Busiest Day of the Week", "Which weekday gets the most orders. The gold bar is the single busiest day."):
+        with card("Most Day Active"):
             dw = c.cv.groupby("day_of_week").order_id.nunique().reindex(DAYS, fill_value=0)
             bars([d[:3] for d in DAYS], dw.values, 220, peak=True, cat="Weekday", val="Orders")
         st.write("")
-        with card("Repeat Customer Rate", "The share of this period's customers who had also ordered before."):
+        with card("Repeat Customer Rate"):
             gauge(a["rate"])
 
 
@@ -386,17 +338,17 @@ def sales():
          ("Avg Daily Revenue", inr(a["rev"] / c.n), a["rev"] / c.n, b["rev"] / c.n, "◎")])
     st.write("")
     l, r = st.columns([2.1, 1])
-    with l, card("Revenue Over Time", "How much you earned, bucketed by day/week/month/quarter (pick above). Dotted line = the period before."):
-        trend(daily(c.cv, "revenue", c.s, c.e, freq=c.freq), daily(c.pv, "revenue", c.ps, c.pe, freq=c.freq), yt="Revenue (₹)", xfmt=c.xfmt)
-    with r, card("Revenue by Category", "Which product categories brought in the most money, highest at the top."):
+    with l, card("Daily Revenue"):
+        trend(daily(c.cv, "revenue", c.s, c.e), daily(c.pv, "revenue", c.ps, c.pe), yt="Revenue (₹)")
+    with r, card("Revenue by Category"):
         rc = c.cv.groupby("category").revenue.sum().sort_values(ascending=False).head(6)
         bars(rc.index, rc.values, 220, horiz=True, pre="₹", cat="Category", val="Revenue (₹)")
     st.write("")
     l, r = st.columns(2)
-    with l, card("Revenue by Day of Week", "Which weekday earns the most, regardless of the exact date. Gold bar = the best day."):
+    with l, card("Revenue by Weekday"):
         rw = c.cv.groupby("day_of_week").revenue.sum().reindex(DAYS, fill_value=0)
         bars([d[:3] for d in DAYS], rw.values, 230, peak=True, pre="₹", cat="Weekday", val="Revenue (₹)")
-    with r, card("Best Trading Days", "The 5 single calendar days with the highest revenue in this period."):
+    with r, card("Best Trading Days"):
         dr, do = daily(c.cv, "revenue", c.s, c.e), daily(c.cv, "order_id", c.s, c.e, "nunique")
         top = dr.nlargest(5)
         tbl(["DAY", "ORDERS", "REVENUE"], [[f"{d:%a, %d %b %Y}", f"{int(do[d]):,}", inr(v)] for d, v in top[top > 0].items()])
@@ -413,19 +365,18 @@ def profitability():
          ("Value Lost to Negative Margin", inr(a["lossv"]), a["lossv"], b["lossv"], "◎", True)])
     st.write("")
     l, r = st.columns([2.1, 1])
-    with l, card("Profit Margin Over Time", "What % of revenue was profit, tracked over time. Higher line = more profitable period."):
-        trend(margin_daily(c.cv, c.s, c.e, freq=c.freq), margin_daily(c.pv, c.ps, c.pe, freq=c.freq),
-              220, pre="", suf="%", yt="Gross margin (%)", xfmt=c.xfmt)
-    with r, card("Profit by Category", "Which product categories generated the most profit, highest at the top."):
-        pc_ = c.cv.groupby("category").gross_profit.sum().sort_values(ascending=False).head(6)
-        bars(pc_.index, pc_.values, 220, horiz=True, pre="₹", cat="Category", val="Profit (₹)")
+    with l, card("Gross Margin Trend"):
+        trend(margin_daily(c.cv, c.s, c.e), margin_daily(c.pv, c.ps, c.pe), 220, pre="", suf="%", yt="Gross margin (%)")
+    with r, card("Profit by Category"):
+        pc = c.cv.groupby("category").gross_profit.sum().sort_values(ascending=False).head(6)
+        bars(pc.index, pc.values, 220, horiz=True, pre="₹", cat="Category", val="Profit (₹)")
     st.write("")
     l, r = st.columns(2)
-    with l, card("Margin by Category", "Profit as a % of revenue for each category — tells you which categories are the most efficient, not just the biggest."):
+    with l, card("Margin by Category"):
         g = c.cv.groupby("category")[["gross_profit", "revenue"]].sum()
         mc = (g.gross_profit / g.revenue.replace(0, float("nan")) * 100).dropna().sort_values(ascending=False).head(6)
         bars(mc.index, mc.values, 230, horiz=True, suf="%", cat="Category", val="Margin (%)")
-    with r, card("Lowest Margin Products", "The 5 products with the thinnest profit margin — worth a pricing or cost review."):
+    with r, card("Lowest Margin Products"):
         p = prod(c.cv)
         p = p[p.rev > 0].assign(m=lambda d: d.gp / d.rev * 100).sort_values("m").head(5)
         tbl(PROD_HEAD, [prow(n, x) for n, x in p.iterrows()])
@@ -444,18 +395,18 @@ def products():
          ("Loss-making Products", f"{la:,}", la, lb, "▼", True)])
     st.write("")
     l, r = st.columns([2.1, 1])
-    with l, card("Top Products by Revenue", "The 8 products that earned the most money in total, highest at the top."):
+    with l, card("Top Products by Revenue"):
         t = pa.rev.sort_values(ascending=False).head(8)
         bars([str(n)[:28] for n in t.index], t.values, 300, horiz=True, pre="₹", cat="Product", val="Revenue (₹)")
-    with r, card("Units Sold by Category", "How the units you sold split across product categories."):
+    with r, card("Units Sold by Category"):
         u = c.cv.groupby("category").quantity.sum().sort_values(ascending=False).head(6)
         donut(u.index, u.values, 300)
     st.write("")
     l, r = st.columns(2)
-    with l, card("🏆 Top Products by Profit", "Your 5 most PROFITABLE products — the ones actually making you the most money, not just the most sold."):
-        tbl(PROD_HEAD, [prow(n, x, "🏆") for n, x in pa.nlargest(5, "gp").iterrows()])
-    with r, card("🐌 Slow Movers", "Your 5 LEAST-sold products (that sold at least once) — candidates to discount, bundle or drop."):
-        tbl(PROD_HEAD, [prow(n, x, "🐌") for n, x in pa[pa.sold > 0].nsmallest(5, "sold").iterrows()])
+    with l, card("Top Products by Profit"):
+        tbl(PROD_HEAD, [prow(n, x) for n, x in pa.nlargest(5, "gp").iterrows()])
+    with r, card("Slow Movers"):
+        tbl(PROD_HEAD, [prow(n, x) for n, x in pa[pa.sold > 0].nsmallest(5, "sold").iterrows()])
 
 
 # ----------------------------------------------------------------- Customers
@@ -468,18 +419,17 @@ def customers():
          ("Revenue per Customer", inr(a["rpc"]), a["rpc"], b["rpc"], "◎")])
     st.write("")
     l, r = st.columns([2.1, 1])
-    with l, card("Active Customers Over Time", "How many distinct customers ordered, bucketed by day/week/month/quarter (pick above)."):
-        trend(daily(c.cv, "customer_id", c.s, c.e, "nunique", freq=c.freq),
-              daily(c.pv, "customer_id", c.ps, c.pe, "nunique", freq=c.freq), 220, pre="", yt="Customers", xfmt=c.xfmt)
-    with r, card("New vs Repeat Revenue", "How much of your revenue came from brand-new customers versus returning ones."):
+    with l, card("Active Customers per Day"):
+        trend(daily(c.cv, "customer_id", c.s, c.e, "nunique"), daily(c.pv, "customer_id", c.ps, c.pe, "nunique"), 220, pre="", yt="Customers")
+    with r, card("New vs Repeat Revenue"):
         sp = c.cv.groupby("is_repeat_customer").revenue.sum().reindex([False, True], fill_value=0)
         donut(["New", "Repeat"], sp.values)
     st.write("")
     l, r = st.columns(2)
-    with l, card("Customers by Category", "How many distinct customers bought from each product category."):
+    with l, card("Customers by Category"):
         cc = c.cv.groupby("category").customer_id.nunique().sort_values(ascending=False).head(6)
         bars(cc.index, cc.values, 240, horiz=True, cat="Category", val="Customers")
-    with r, card("Top Customers", "Your 5 highest-spending customers in this period, ranked by revenue."):
+    with r, card("Top Customers"):
         t = c.cv.groupby("customer_id").agg(o=("order_id", "nunique"), rev=("revenue", "sum"), gp=("gross_profit", "sum")).nlargest(5, "rev")
         tbl(["CUSTOMER", "ORDERS", "REVENUE", "PROFIT"],
             [[f"Customer {escape(str(i))}", f"{int(x.o):,} orders", inr(x.rev), sgn(x.gp)] for i, x in t.iterrows()])
@@ -497,17 +447,16 @@ def orders():
          ("Undelivered Rate", f"{100 - dr:.1f}%" if pl else "—", 100 - dr, 100 - pdr, "▼", True, True)])
     st.write("")
     l, r = st.columns([2.1, 1])
-    with l, card("Orders Over Time", "How many orders came in, bucketed by day/week/month/quarter (pick above)."):
-        trend(daily(c.cur, "order_id", c.s, c.e, "nunique", freq=c.freq),
-              daily(c.prv, "order_id", c.ps, c.pe, "nunique", freq=c.freq), 220, pre="", yt="Orders", xfmt=c.xfmt)
-    with r, card("Order Status", "The split of orders by outcome: Delivered, Cancelled or Returned."):
+    with l, card("Orders per Day"):
+        trend(daily(c.cur, "order_id", c.s, c.e, "nunique"), daily(c.prv, "order_id", c.ps, c.pe, "nunique"), 220, pre="", yt="Orders")
+    with r, card("Order Status"):
         s = c.cur.groupby("order_status").order_id.nunique().sort_values(ascending=False)
         donut(s.index, s.values)
     st.write("")
     l, r = st.columns(2)
-    with l, card("Order Value Distribution", "How order sizes (in ₹) are spread out — tall bars show the most common order value range."):
+    with l, card("Order Value Distribution"):
         hist(c.cv.groupby("order_id").revenue.sum().values)
-    with r, card("Orders by Category", "How many orders touched each product category."):
+    with r, card("Orders by Category"):
         oc = c.cur.groupby("category").order_id.nunique().sort_values(ascending=False).head(6)
         bars(oc.index, oc.values, 230, horiz=True, cat="Category", val="Orders")
 
@@ -526,15 +475,14 @@ def quality():
          ("Rows with Missing Values", f"{miss(c.raw):,}", miss(c.raw), miss(c.raw_p), "◉", True)])
     st.write("")
     l, r = st.columns([2.1, 1])
-    with l, card("Duplicates Over Time", "How many duplicate rows were caught and removed, bucketed by day/week/month/quarter (pick above)."):
+    with l, card("Duplicates per Day"):
         d, p = c.raw[c.raw.data_quality_flag == "Deduplicated"], c.raw_p[c.raw_p.data_quality_flag == "Deduplicated"]
-        trend(daily(d, "order_id", c.s, c.e, "count", freq=c.freq), daily(p, "order_id", c.ps, c.pe, "count", freq=c.freq),
-              220, pre="", yt="Duplicates", xfmt=c.xfmt)
-    with r, card("Records by Quality Flag", "How raw records break down by data-quality flag (e.g. clean vs. deduplicated)."):
+        trend(daily(d, "order_id", c.s, c.e, "count"), daily(p, "order_id", c.ps, c.pe, "count"), 220, pre="", yt="Duplicates")
+    with r, card("Records by Quality Flag"):
         fl = c.raw.data_quality_flag.fillna("Unflagged").value_counts()
         donut(fl.index, fl.values)
     st.write("")
-    with card("Missing Values by Field", "Which columns have blank/missing values, and what share of all rows that represents."):
+    with card("Missing Values by Field"):
         ms = c.raw[key].isna().sum()
         tbl(["FIELD", "MISSING", "SHARE"], [[k, f"{int(v):,}", f"{z(v, tot) * 100:.1f}%"] for k, v in ms.items()])
 
@@ -557,18 +505,17 @@ def search_results(q, c):
 
     om = d[has("order_id") | has("customer_id")].sort_values("order_date", ascending=False)
 
-    html(f'<div class="vs" style="margin:0 0 12px">Matches for <b>"{escape(q)}"</b> across all dates. Clear the search box to go back.</div>')
+    html(f'<div class="vs" style="margin:0 0 12px">Matches for <b>“{escape(q)}”</b> across all dates. Clear the search box to go back.</div>')
 
     if not (page_hits or len(pr) or len(cg) or len(om)):
         with card("No matches"):
-            html(f'<div class="vs">Nothing found for "{escape(q)}". Try a product name, category, order ID or customer ID.</div>')
+            html(f'<div class="vs">Nothing found for “{escape(q)}”. Try a product name, category, order ID or customer ID.</div>')
         return
 
     if page_hits:
         with card("Pages"):
             for p in page_hits:
                 st.page_link(p)
-
     if len(pr) or len(cg):
         l, r = st.columns([2.1, 1])
         if len(pr):
@@ -578,7 +525,6 @@ def search_results(q, c):
             with r, card(f"Categories ({len(cg):,} found)"):
                 tbl(["CATEGORY", "ORDERS", "REVENUE", "PROFIT"],
                     [[escape(str(n)), f"{int(x.o):,}", inr(x.rev), sgn(x.gp)] for n, x in cg.head(6).iterrows()])
-
     if len(om):
         st.write("")
         with card(f"Orders & Customers ({len(om):,} rows{', showing latest 10' if len(om) > 10 else ''})"):
@@ -612,38 +558,26 @@ with st.sidebar:
         st.image(str(LOGO), width=185)
     else:
         html('<div class="brand"><span class="logo"></span>Zestly</div>')
-
-    if st.button("🔄 Refresh data", use_container_width=True):
-        st.cache_data.clear()
-        st.rerun()
-
-    st.text_input("search", placeholder="🔍 Search products, orders...", label_visibility="collapsed", key="q")
+    st.text_input("search", placeholder="🔍  Search products, orders...", label_visibility="collapsed", key="q")
     st.write("")
     for p in pages:
         st.page_link(p)
-    html("""<div class="premium"><b>Upgrade to Premium!</b><p>Upgrade your account and unlock all of the benefits.</p>
-             <div class="btn">Upgrade premium</div></div>""")
-
+   
 q = st.session_state.get("q", "").strip()
 
-h1, h2, h2b, h3 = st.columns([2.6, 2, 1.2, 1], vertical_alignment="center")
+h1, h2, h3 = st.columns([3, 2.2, 1], vertical_alignment="center")
 h1.markdown(f'<div class="pgtitle">{"Search results" if q else escape(pg.title)}</div><div class="pgbar"></div>', unsafe_allow_html=True)
-
 df = load()
 mn, mx = df["order_date"].min(), df["order_date"].max()
 with h2:
     rng = st.date_input("range", (max(mn, mx - pd.Timedelta(days=29)), mx), key="rng", label_visibility="collapsed")
-    if len(rng) != 2:
-        st.stop()
-with h2b:
-    st.selectbox("granularity", ["Auto", "Daily", "Weekly", "Monthly", "Quarterly"],
-                 key="gran_choice", label_visibility="collapsed")
+if len(rng) != 2:
+    st.stop()
 
 c = ctx()
 h3.download_button("⬇ Export", c.raw.to_csv(index=False).encode(), f"zestly_{c.s:%Y%m%d}_{c.e:%Y%m%d}.csv",
-                    "text/csv", use_container_width=True)
+                   "text/csv", use_container_width=True)
 st.write("")
-
 if q:
     search_results(q, c)
 else:
