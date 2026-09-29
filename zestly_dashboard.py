@@ -5,7 +5,6 @@ from types import SimpleNamespace
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
-from plotly.subplots import make_subplots
 from sqlalchemy import create_engine
 
 from config import DATABASE_URL
@@ -107,24 +106,30 @@ details.inf > summary::-webkit-details-marker {{ display:none; }}
 details.inf > summary:hover, details.inf[open] > summary {{ border-color:{BLUE}; color:{BLUE}; }}
 details.inf > .tip {{ position:absolute; z-index:999; top:26px; left:-8px; width:250px; background:#fff; border:1px solid {BORDER}; border-radius:10px;
     box-shadow:0 8px 24px rgba(17,24,39,.14); padding:9px 11px; font-size:.76rem; font-weight:400; line-height:1.4; color:#374151; }}
+/* ---- "Selected dates" / View dropdown: same grey as the search bar ---- */
 div[data-testid="stSelectbox"] {{ color-scheme:light; }}
-div[data-testid="stSelectbox"] div[data-baseweb="select"],
-div[data-testid="stSelectbox"] div[data-baseweb="select"] > div,
-div[data-testid="stSelectbox"] div[data-baseweb="select"] > div > div,
-div[data-testid="stSelectbox"] div[data-baseweb="select"] input {{ background:{SEARCH_BG} !important; background-color:{SEARCH_BG} !important; }}
-div[data-testid="stSelectbox"] div[data-baseweb="select"] > div {{ border:1px solid {SEARCH_BORDER} !important;
-    border-radius:12px !important; min-height:34px; box-shadow:none !important; }}
-div[data-testid="stSelectbox"] div[data-baseweb="select"] > div:focus-within {{ border-color:{BLUE} !important; }}
+div[data-testid="stSelectbox"] div[data-baseweb="select"] div,
+div[data-testid="stSelectbox"] div[data-baseweb="select"] input {{ background:transparent !important; background-color:transparent !important; border:none !important; box-shadow:none !important; }}
+div[data-testid="stSelectbox"] div[data-baseweb="select"] {{ background:{SEARCH_BG} !important; background-color:{SEARCH_BG} !important;
+    border:1px solid {SEARCH_BORDER} !important; border-radius:12px !important; min-height:34px; box-shadow:none !important; overflow:hidden; }}
+div[data-testid="stSelectbox"] div[data-baseweb="select"]:focus-within {{ border-color:{BLUE} !important; }}
 div[data-testid="stSelectbox"] div[data-baseweb="select"] * {{ color:{SEARCH_TXT} !important; -webkit-text-fill-color:{SEARCH_TXT} !important; font-size:.8rem; font-weight:600; }}
 div[data-testid="stSelectbox"] div[data-baseweb="select"] svg {{ fill:{SEARCH_TXT} !important; }}
-div[data-baseweb="popover"] ul, ul[role="listbox"] {{ background:{CARD} !important; }}
-ul[role="listbox"] li, ul[role="listbox"] li * {{ color:{TEXT} !important; -webkit-text-fill-color:{TEXT} !important; font-size:.82rem; }}
-ul[role="listbox"] li:hover, ul[role="listbox"] li[aria-selected="true"] {{ background:#EAF1FF !important; }}
+div[data-baseweb="popover"] div[data-baseweb="menu"],
+div[data-baseweb="popover"] ul,
+div[data-testid="stSelectboxVirtualDropdown"],
+ul[role="listbox"] {{ background:{CARD} !important; background-color:{CARD} !important; color-scheme:light; }}
+ul[role="listbox"] li, ul[role="listbox"] li * {{ background-color:transparent !important; color:{TEXT} !important; -webkit-text-fill-color:{TEXT} !important; font-size:.82rem; }}
+ul[role="listbox"] li:hover, ul[role="listbox"] li[aria-selected="true"] {{ background-color:#EAF1FF !important; }}
 table.bs.good th {{ color:#15803D; border-bottom:2px solid {GREEN}; }}
 table.bs.slow th {{ color:#B45309; border-bottom:2px solid {AMBER}; }}
 .rk {{ display:inline-flex; width:24px; height:24px; border-radius:50%; background:#DCFCE7; color:#15803D; font-weight:800; font-size:.72rem;
     align-items:center; justify-content:center; margin-right:10px; }}
 .slw {{ background:#FEF3C7; color:#B45309; font-weight:700; font-size:.76rem; padding:2px 8px; border-radius:6px; white-space:nowrap; }}
+.chips {{ display:flex; gap:10px; flex-wrap:wrap; margin:2px 0 6px; }}
+.chip {{ background:#F3F4F6; border-radius:10px; padding:6px 12px; }}
+.chip .cl {{ font-size:.68rem; color:{MUTED}; font-weight:600; letter-spacing:.3px; }}
+.chip .cv {{ font-size:.98rem; font-weight:800; color:{TEXT}; }}
 </style>""", unsafe_allow_html=True)
 
 
@@ -350,42 +355,48 @@ def donut(labels, values, h=230):
     show(base(f, h).update_layout(showlegend=True, legend=dict(font=dict(size=11, color=CHARTTXT))))
 
 
-def hist(values, h=260):
-    """Order value distribution: box plot strip (spread + outliers) above a histogram, with median and average lines."""
+NICE_STEPS = [500, 1000, 2000, 2500, 5000, 10000, 20000, 25000, 50000, 100000]
+
+
+def hist(values, h=250):
+    """Order value distribution: orders grouped into clear price ranges, with median / average / largest shown as chips.
+    The range is cut at the 95th percentile and everything above goes into one last '₹X+' bar,
+    so a few huge orders can't squash the rest of the chart."""
     v = pd.Series(list(values), dtype="float").dropna()
     if v.empty:
         html('<div class="vs">No data in this period</div>')
         return
 
-    med, avg = v.median(), v.mean()
-    f = make_subplots(rows=2, cols=1, shared_xaxes=True, row_heights=[0.2, 0.8], vertical_spacing=0.03)
+    tot, med, avg, big = len(v), v.median(), v.mean(), v.max()
+    fmt = lambda x: f"₹{x / 1000:g}k" if abs(x) >= 1000 else f"₹{x:g}"
 
-    # Top strip: box plot (middle 50% of orders + outliers)
-    f.add_trace(go.Box(x=v, orientation="h", line=dict(color=BLUE), fillcolor="rgba(47,107,255,.15)",
-                       boxpoints="outliers", marker=dict(color=BLUE, size=4, opacity=.5),
-                       hoverinfo="x", name=""), row=1, col=1)
+    cap = v.quantile(0.95)
+    step = next((s for s in NICE_STEPS if cap / s <= 8), NICE_STEPS[-1])
+    top = max(step, int(-(-cap // step)) * step)
+    edges = list(range(0, int(top) + 1, int(step)))
 
-    # Main: histogram
-    f.add_trace(go.Histogram(x=v, nbinsx=20, marker=dict(color=BLUE, line=dict(color=CARD, width=1.5)),
-                             opacity=.9, name="",
-                             hovertemplate="Order value: ₹%{x}<br>Orders: %{y}<extra></extra>"), row=2, col=1)
+    bins = [float("-inf")] + edges[1:] + [float("inf")]
+    labels = [f"Under {fmt(edges[1])}"] + [f"{fmt(edges[i])}–{fmt(edges[i + 1])}" for i in range(1, len(edges) - 1)] + [f"{fmt(edges[-1])}+"]
+    counts = pd.cut(v, bins=bins, right=False).value_counts(sort=False).values
 
-    # Median and average reference lines (labels placed on opposite sides so they never overlap)
-    med_pos, avg_pos = ("top left", "top right") if med <= avg else ("top right", "top left")
-    f.add_vline(x=med, line=dict(color=GREEN, width=2, dash="dash"), row=2, col=1,
-                annotation_text=f"Median {inr(med)}", annotation_position=med_pos,
-                annotation_font=dict(size=11, color="#15803D"))
-    f.add_vline(x=avg, line=dict(color=AMBER, width=2, dash="dot"), row=2, col=1,
-                annotation_text=f"Average {inr(avg)}", annotation_position=avg_pos,
-                annotation_font=dict(size=11, color="#B45309"))
+    med_bin = int(pd.cut(pd.Series([med]), bins=bins, right=False).cat.codes.iloc[0])
+    colors = [BLUE if i == med_bin else "#A9C1FF" for i in range(len(labels))]
 
+    chip = lambda l, val: f'<div class="chip"><div class="cl">{l}</div><div class="cv">{val}</div></div>'
+    html(f'<div class="chips">{chip("MEDIAN ORDER", inr(med))}{chip("AVERAGE ORDER", inr(avg))}{chip("LARGEST ORDER", inr(big))}</div>')
+
+    f = go.Figure(go.Bar(x=labels, y=counts, marker_color=colors,
+                         text=[f"{n:,}<br>{n / tot * 100:.0f}%" for n in counts],
+                         textposition="outside", textfont=dict(color=CHARTTXT, size=11), cliponaxis=False,
+                         hovertemplate="%{x}<br>%{y:,} orders<extra></extra>"))
+    try:
+        f.update_layout(barcornerradius=6)
+    except Exception:
+        pass
     base(f, h)
-    axis_style(f)
-    f.update_layout(bargap=0.04)
-    f.update_xaxes(showticklabels=False, title=None, row=1, col=1)
-    f.update_yaxes(showticklabels=False, showline=False, ticks="", showgrid=False, row=1, col=1)
-    f.update_xaxes(tickprefix="₹", title=dict(text="Order value (₹)", font=dict(size=11, color=CHARTTXT), standoff=8), row=2, col=1)
-    f.update_yaxes(title=dict(text="Orders", font=dict(size=11, color=CHARTTXT), standoff=8), row=2, col=1)
+    axis_style(f, xt="Order value", yt="Number of orders", xgrid=False, ygrid=True)
+    f.update_layout(margin=dict(t=36, l=5, r=5, b=5), bargap=0.15)
+    f.update_yaxes(range=[0, max(counts) * 1.25])
     show(f)
 
 
@@ -596,9 +607,9 @@ def orders():
     st.write("")
     l, r = st.columns(2)
     with l, card("Order Value Distribution",
-                 "How big your orders are. Each bar counts orders in a value range. The box on top shows where the middle 50% "
-                 "of orders fall, the green line is the median (typical order) and the amber line is the average. "
-                 "If the average is well above the median, a few very large orders are pulling it up."):
+                 "How big your delivered orders are. Each bar counts the orders in a price range, with the number and share of orders on top. "
+                 "The darker bar is where the median (typical) order falls. If the average is well above the median, "
+                 "a few very large orders are pulling it up. The last bar groups all the biggest orders together."):
         hist(c.cv.groupby("order_id").revenue.sum().values)
     with r, card("Orders by Category", "How many orders include products from each category."):
         oc = c.cur.groupby("category").order_id.nunique().sort_values(ascending=False).head(6)
