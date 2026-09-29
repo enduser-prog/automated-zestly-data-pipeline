@@ -17,6 +17,8 @@ BLUE, GREEN, RED, AMBER = "#2F6BFF", "#22C55E", "#EF4444", "#F59E0B"
 OFFWHITE, GREYTXT, GREYLINE = "#F7F7F4", "#6B7280", "#E2E3E8"
 DARKGREY, DARKGREY_TXT = "#3F4451", "#E8E9EE"
 SEARCH_BG, SEARCH_BORDER, SEARCH_TXT, SEARCH_HINT = "#E5E7EB", "#D1D5DB", "#1F2937", "#6B7280"
+# "Selected dates" / View dropdown: same family as the search bar, just a shade darker
+SELECT_BG, SELECT_BG_HOVER, SELECT_BORDER, SELECT_TXT = "#D3D7DF", "#CBD0D9", "#BCC2CC", "#1F2937"
 NAV_ICON, NAV_ICON_ACTIVE = "#4B5563", "#4C8DFF"
 PALETTE = [BLUE, GREEN, AMBER, "#8B5CF6", "#EC4899", "#14B8A6", "#94A3B8"]
 DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
@@ -106,15 +108,33 @@ details.inf > summary::-webkit-details-marker {{ display:none; }}
 details.inf > summary:hover, details.inf[open] > summary {{ border-color:{BLUE}; color:{BLUE}; }}
 details.inf > .tip {{ position:absolute; z-index:999; top:26px; left:-8px; width:250px; background:#fff; border:1px solid {BORDER}; border-radius:10px;
     box-shadow:0 8px 24px rgba(17,24,39,.14); padding:9px 11px; font-size:.76rem; font-weight:400; line-height:1.4; color:#374151; }}
-/* ---- "Selected dates" / View dropdown: same grey as the search bar ---- */
-div[data-testid="stSelectbox"] {{ color-scheme:light; }}
+
+/* ---- "Selected dates" / View dropdown: search-bar grey, one shade darker, on every page ---- */
+div[data-testid="stSelectbox"], .stSelectbox {{ color-scheme:light; }}
+/* the visible box */
+div[data-testid="stSelectbox"] div[data-baseweb="select"],
+.stSelectbox div[data-baseweb="select"],
+div[data-baseweb="select"] {{ background:{SELECT_BG} !important; background-color:{SELECT_BG} !important;
+    border:1px solid {SELECT_BORDER} !important; border-radius:12px !important; min-height:34px;
+    box-shadow:none !important; overflow:hidden; color-scheme:light; }}
+div[data-testid="stSelectbox"] div[data-baseweb="select"]:hover,
+div[data-baseweb="select"]:hover {{ background:{SELECT_BG_HOVER} !important; background-color:{SELECT_BG_HOVER} !important; }}
+div[data-testid="stSelectbox"] div[data-baseweb="select"]:focus-within,
+div[data-baseweb="select"]:focus-within {{ border-color:{BLUE} !important; }}
+/* everything inside the box stays see-through so Streamlit's dark theme cannot repaint it */
+div[data-baseweb="select"] > div,
+div[data-baseweb="select"] div,
+div[data-baseweb="select"] input,
 div[data-testid="stSelectbox"] div[data-baseweb="select"] div,
-div[data-testid="stSelectbox"] div[data-baseweb="select"] input {{ background:transparent !important; background-color:transparent !important; border:none !important; box-shadow:none !important; }}
-div[data-testid="stSelectbox"] div[data-baseweb="select"] {{ background:{SEARCH_BG} !important; background-color:{SEARCH_BG} !important;
-    border:1px solid {SEARCH_BORDER} !important; border-radius:12px !important; min-height:34px; box-shadow:none !important; overflow:hidden; }}
-div[data-testid="stSelectbox"] div[data-baseweb="select"]:focus-within {{ border-color:{BLUE} !important; }}
-div[data-testid="stSelectbox"] div[data-baseweb="select"] * {{ color:{SEARCH_TXT} !important; -webkit-text-fill-color:{SEARCH_TXT} !important; font-size:.8rem; font-weight:600; }}
-div[data-testid="stSelectbox"] div[data-baseweb="select"] svg {{ fill:{SEARCH_TXT} !important; }}
+div[data-testid="stSelectbox"] div[data-baseweb="select"] input {{ background:transparent !important; background-color:transparent !important;
+    border:none !important; box-shadow:none !important; }}
+/* text + arrow */
+div[data-baseweb="select"] *,
+div[data-testid="stSelectbox"] div[data-baseweb="select"] * {{ color:{SELECT_TXT} !important; -webkit-text-fill-color:{SELECT_TXT} !important;
+    font-size:.8rem; font-weight:600; }}
+div[data-baseweb="select"] svg,
+div[data-testid="stSelectbox"] div[data-baseweb="select"] svg {{ fill:{SELECT_TXT} !important; color:{SELECT_TXT} !important; }}
+/* the list that opens under it */
 div[data-baseweb="popover"] div[data-baseweb="menu"],
 div[data-baseweb="popover"] ul,
 div[data-testid="stSelectboxVirtualDropdown"],
