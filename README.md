@@ -15,7 +15,18 @@ A self-running data pipeline that generates messy, realistic e-commerce orders, 
 
 This isn't a one-off analysis of a static CSV. It's a small production-style system: **data generation → cleaning → transformation → visualization**, running on autopilot via GitHub Actions.
 
-<img width="943" height="308" alt="Screenshot 2026-09-27 231135" src="https://github.com/user-attachments/assets/2837ee50-8d59-45aa-a155-bd63af3204d3" />
+
+<img width="848" height="365" alt="Screenshot 2026-09-30 163931" src="https://github.com/user-attachments/assets/312ced5c-4456-4c3e-8215-fe1edd07804f" />
+
+<img width="848" height="365" alt="Screenshot 2026-09-30 164139" src="https://github.com/user-attachments/assets/88db3cda-1fda-4d58-869e-b1a64a42476f" />
+
+<img width="848" height="365" alt="Screenshot 2026-09-30 164225" src="https://github.com/user-attachments/assets/044dfda7-8586-4ea9-a49c-6f5753522dba" />
+
+<img width="848" height="365" alt="Screenshot 2026-09-30 164324" src="https://github.com/user-attachments/assets/0e397126-f032-48bf-ad4e-f0eb581cd62d" />
+
+
+
+
 
 ---
 
