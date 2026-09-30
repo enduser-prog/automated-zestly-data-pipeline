@@ -38,13 +38,13 @@ This isn't a one-off analysis of a static CSV. It's a small production-style sys
 
 ---
 
-## 🗄️ Database
+##  Database
 
 **Aiven** (managed PostgreSQL) is where all the data is stored.
 
 <img width="943" height="279" alt="image" src="https://github.com/user-attachments/assets/ae20a6a4-bffa-427b-a71b-1c81581ce524" />
 
-### 🔐 Two database users, two levels of access
+###  Two database users, two levels of access
 
 Access is split on purpose, following the principle of least privilege:
 
@@ -57,7 +57,7 @@ Credentials for both are stored as **GitHub Secrets** and Streamlit secrets, nev
 
 ---
 
-## 📋 The Brief
+##  The Brief
 
 **Zestly** is a fictional e-commerce brand used as the scenario for this project. The premise: Zestly's team doesn't want to wait on someone to manually pull, clean, and refresh sales reports every week — they want to open one link and see the current state of the business, fully caught up, every time.
 
@@ -129,32 +129,32 @@ A **7-page Streamlit app** (Overview, Sales, Profitability, Products, Customers,
 
 Every run, after the `analytics_sales` table is rebuilt, the script computes **30 business metrics** as a console-logged sanity check — grouped here by what question each one answers:
 
-**💰 Revenue & order value**
+** Revenue & order value**
 Total Revenue · Month-over-Month Revenue Growth % · Average Order Value · Median Order Value · Average Items per Order
 
-**👥 Customers**
+** Customers**
 Customer Lifetime Value (CLV) · Repeat Customer Rate % · New vs. Returning Revenue Split · New Customer Signups per Month · Average Customer Tenure at Purchase · AOV: New vs. Repeat Customers · Days Since Last Order (avg. recency)
 
-**📈 Profitability**
+** Profitability**
 Gross Profit Margin % · Category Revenue vs. Margin Comparison
 
-**📦 Products & inventory**
+** Products & inventory**
 Top-Selling Product · Best-Performing Category · Inventory Turnover Rate · Slow-Moving Products (bottom 20% by units sold) · Product Revenue Concentration (top 20% of products)
 
-**🚚 Order fulfillment**
+** Order fulfillment**
 Order Fulfillment Rate % · Cancellation Rate % · Return Rate % · Cancellation Rate by Payment Method
 
-**🏷️ Discounts & channels**
+** Discounts & channels**
 Discount Utilization Rate % · Average Discount Applied % · Revenue by Payment Method · Revenue by Order Source · Weekday vs. Weekend Revenue Split
 
-**🌍 Concentration & geography**
+** Concentration & geography**
 Top Cities by Revenue · Revenue Pareto Ratio (share of revenue from the top 20% of customers)
 
 > **Worth being precise about one thing:** these 30 are printed to the console as a run-by-run audit log, *not* queried directly by the dashboard. The dashboard computes its own live version of the overlapping metrics (revenue, margin, repeat rate, etc.) directly from the `analytics_sales` table, filtered to whatever date range is selected — so the two layers double-check each other rather than one blindly trusting the other.
 
 ---
 
-## 🖥️ How the Dashboard Is Organized
+##  How the Dashboard Is Organized
 
 Each of the 7 pages in `zestly_dashboard.py` is scoped to one business question, with its own KPI row and supporting charts:
 
@@ -172,7 +172,7 @@ Every page compares the selected date range against the equivalent prior period 
 
 ---
 
-## 🧰 Tech Stack
+##  Tech Stack
 
 | Layer | Tool |
 |---|---|
@@ -185,7 +185,7 @@ Every page compares the selected date range against the equivalent prior period 
 
 ---
 
-## 🎯 Honest Scope
+##  Honest Scope
 
 - **The data is synthetic**, generated with `Faker`, not real transactions. It is for representational purposes only, to show the pipeline working.
 - **Cleaning rules are intentionally simple** (median imputation, string normalization, exact-match deduplication). A production system would likely need fuzzy deduplication and more nuanced imputation, but the goal here was a clear, auditable baseline rather than an opaque one.
